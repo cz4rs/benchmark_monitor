@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 import json
 import math
 import os
+import re
 from pathlib import Path
 from scipy.stats import mannwhitneyu
 from scipy import stats
@@ -127,7 +128,7 @@ def smooth(x,window_len=11,window='hanning'):
     y=np.convolve(w/w.sum(),s,mode='valid')
     return y[0:len(x)]
 
-def parse_directory(dir_name, args):
+def parse_directory(dir_name, args, env):
     # get list of files to parse
     files = []
     for entry in os.scandir(os.path.join(args.directory, dir_name)):
@@ -214,7 +215,13 @@ def parse_directory(dir_name, args):
 
             plt.title('\n'.join(wrap(benchmark, 50)))
             plt.legend(loc="upper left")
-            figurePath = os.path.join(args.outputdirectory, dir_name, benchmark+"-"+metric+".png")
+            figurePath = os.path.join(
+                args.outputdirectory,
+                remove_special_characters(dir_name),
+                remove_special_characters(benchmark)
+                + remove_special_characters(metric)
+                + ".png",
+            )
             ensureDir(figurePath)
             plt.tight_layout()
             plt.savefig(figurePath)
@@ -223,22 +230,35 @@ def parse_directory(dir_name, args):
             plots.append(plotItem)
 
     # generate report
-    env      = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=select_autoescape(['html', 'xml']))
     template = env.get_template('template.html')
-    outputFilePath = os.path.join(args.outputdirectory, dir_name + '.html')
+    outputFilePath = os.path.join(args.outputdirectory, remove_special_characters(dir_name) + '.html')
     ensureDir(outputFilePath)
     file     = open(outputFilePath, 'w')
     file.write(template.render(plots=plots))
     file.close()
 
+def remove_special_characters(s):
+    return re.sub(r'[^\w_. -]', '_', s)
+
 def main():
     args = create_parser()
     print('args = ' + str(sys.argv))
+    env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=select_autoescape(['html', 'xml']))
+    env.globals['remove_special_characters'] = remove_special_characters
 
+    dirs = []
     for entry in os.scandir(args.directory):
         if entry.is_dir() and not entry.name.startswith("."):
             print('parsing directory ' + entry.name)
-            parse_directory(entry.name, args)
+            parse_directory(entry.name, args, env)
+            dirs.append(entry.name)
+
+    template = env.get_template('index_template.html')
+    outputFilePath = os.path.join(args.outputdirectory, 'index.html')
+    ensureDir(outputFilePath)
+    file = open(outputFilePath, 'w')
+    file.write(template.render(dirs=dirs))
+    file.close()
 
 if __name__ == '__main__':
     main()

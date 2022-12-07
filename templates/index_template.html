@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html>
+    <ul>
+        {% for directory in dirs %}
+        <li><a href="{{remove_special_characters(directory)}}.html">{{directory}}</li>
+        {% endfor %}
+    </ul>
+</html>
