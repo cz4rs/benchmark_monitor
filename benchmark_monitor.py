@@ -18,8 +18,7 @@ from textwrap import wrap
 
 def ensureDir(file_path):
     directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    Path(directory).mkdir(parents=True, exist_ok=True)
 
 def create_parser():
     parser = ArgumentParser(description='Generates a chart for each google benchmark across a benchmark history with optional step change detection.')
@@ -233,9 +232,8 @@ def parse_directory(dir_name, args, env):
     template = env.get_template('template.html')
     outputFilePath = os.path.join(args.outputdirectory, remove_special_characters(dir_name) + '.html')
     ensureDir(outputFilePath)
-    file     = open(outputFilePath, 'w')
-    file.write(template.render(plots=plots))
-    file.close()
+    with open(outputFilePath, 'w') as file:
+        file.write(template.render(plots=plots))
 
 def remove_special_characters(s):
     return re.sub(r'[^\w_. -]', '_', s)
@@ -256,9 +254,8 @@ def main():
     template = env.get_template('index_template.html')
     outputFilePath = os.path.join(args.outputdirectory, 'index.html')
     ensureDir(outputFilePath)
-    file = open(outputFilePath, 'w')
-    file.write(template.render(dirs=dirs))
-    file.close()
+    with open(outputFilePath, 'w') as file:
+        file.write(template.render(dirs=dirs))
 
 if __name__ == '__main__':
     main()
