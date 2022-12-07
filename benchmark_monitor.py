@@ -44,7 +44,7 @@ def create_parser():
 
 def parse_benchmark_file(file, benchmarks, metric):
     print('parsing ' + file)
-    
+
     with open(file) as json_file:
         data = json.load(json_file)
         for b in data['benchmarks']:
@@ -82,7 +82,7 @@ def estimateStepLocation(values):
 
     step_max_idx = peaks[-1]
     return step_max_idx
-    
+
 def hasSlowedDown(benchmark, raw_values, smoothedvalues, slidingwindow, alphavalue, metric):
     sample_count = len(raw_values)
     sample_a_len = sample_count - slidingwindow
@@ -96,7 +96,7 @@ def hasSlowedDown(benchmark, raw_values, smoothedvalues, slidingwindow, alphaval
     print('BENCHMARK ' + benchmark + ' STATS=%.3f, p=%.3f' % (stat, p))
     if p < alphavalue:
         print('\tStep change possibly found, performing t-test...')
-        
+
         # confirm with Welch's t-test as mw can reject if sd is big (see: https://thestatsgeek.com/2014/04/12/is-the-wilcoxon-mann-whitney-test-a-good-non-parametric-alternative-to-the-t-test/)
         stat, p = stats.ttest_ind(sample_a, sample_b, equal_var = False)
         if p < alphavalue:
@@ -127,22 +127,19 @@ def smooth(x,window_len=11,window='hanning'):
     y=np.convolve(w/w.sum(),s,mode='valid')
     return y[0:len(x)]
 
-def main():
-    args = create_parser()
-    print('args = ' + str(sys.argv))
-    
+def parse_directory(dir_name, args):
     # get list of files to parse
     files = []
-    for entry in os.scandir(args.directory):
+    for entry in os.scandir(os.path.join(args.directory, dir_name)):
         if entry.path.endswith(".json") and entry.is_file():
             files.append(entry)
     if len(files) == 0:
         print('no benchmark data')
         exit()
-    
+
     # sort them in order of creation time (oldest to newest)
     files.sort(key=os.path.getmtime)
-    
+
     # check if the user is addressing a subset of records using the range addressing scheme (startindex to endindex)
     if args.startindex != -1 and args.endindex != -1:
         files = files[args.startindex:args.endindex]
@@ -150,13 +147,13 @@ def main():
         # discard all records after endindex (if set)
         if args.discard != -1:
             files = files[:len(files)-args.discard]
-        
+
         # limit the number of test samples
         if args.maxsamples != 0:
             fileCount  = len(files)
             maxsamples = clamp(args.maxsamples, 0, fileCount)
             files      = files[fileCount-maxsamples-1:fileCount-1]
-    
+
     # parse them, return python dictionary of lists where the key is the benchmark name and the value is a python list of values recorded for that benchmark accross all files
     metrics    = args.metric
     plots      = []
@@ -168,10 +165,10 @@ def main():
                     parse_benchmark_file(entry.path, benchmarks, metric)
                 except:
                     print('Corrupt benchmark file encountered, skipping...')
-                    
+
         # analyse benchmarks
         for benchmark in benchmarks:
-        
+
             # check we have enough records for this benchmark (if not then skip it)
             raw_values   = benchmarks[benchmark]
             sample_count = len(raw_values)
@@ -179,16 +176,16 @@ def main():
             if sample_count < 10 + args.slidingwindow:
                 print('BENCHMARK: ' + benchmark + ' needs more data, skipping...')
                 continue
-                
+
             # apply a median filter to the data to smooth out temporary spikes
             smoothedValues = smooth(np.array(raw_values), args.medianfilter)
-            
+
             # plot raw and smoothed values
             plt.plot(raw_values, '-g', label="raw")
             plt.plot(smoothedValues, '-b', label="smoothed")
             plt.ylabel(metric)
             plt.xlabel('sample #')
-            
+
             # plot line fit
             x_vals  = np.arange(0, len(raw_values), 1)
             y_vals  = raw_values
@@ -200,14 +197,14 @@ def main():
 
             # has it slowed down?
             if args.detectstepchanges and hasSlowedDown(benchmark, raw_values, smoothedValues, args.slidingwindow, args.alphavalue, metric):
-           
+
                 # estimate step location
                 step_max_idx  = estimateStepLocation(smoothedValues)
                 if step_max_idx > 0 and step_max_idx < sample_count:
                     print('step_max_idx = ' + str(step_max_idx))
                     if (smoothedValues[step_max_idx+1] > smoothedValues[step_max_idx-1]):
                         print('\tBENCHMARK ' + benchmark + ' STEP CHANGE IN PERFORMANCE ENCOUNTERED (SLOWDOWN) - likely occurred somewhere between this build and this build minus ' + str(sample_count - step_max_idx) + ']')
-                        
+
                         # plot step location
                         plt.plot((step_max_idx, step_max_idx), (np.min(raw_values), np.max(raw_values)), 'r', label="slowdown location estimation")
                     else:
@@ -217,21 +214,31 @@ def main():
 
             plt.title('\n'.join(wrap(benchmark, 50)))
             plt.legend(loc="upper left")
-            figurePath = os.path.join(args.outputdirectory, benchmark+"-"+metric+".png")
+            figurePath = os.path.join(args.outputdirectory, dir_name, benchmark+"-"+metric+".png")
             ensureDir(figurePath)
             plt.tight_layout()
             plt.savefig(figurePath)
             plt.clf()
             plotItem = dict(path=os.path.relpath(figurePath, args.outputdirectory))
             plots.append(plotItem)
-        
+
     # generate report
     env      = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=select_autoescape(['html', 'xml']))
     template = env.get_template('template.html')
-    outputFilePath = os.path.join(args.outputdirectory, 'index.html')
+    outputFilePath = os.path.join(args.outputdirectory, dir_name + '.html')
+    ensureDir(outputFilePath)
     file     = open(outputFilePath, 'w')
     file.write(template.render(plots=plots))
     file.close()
+
+def main():
+    args = create_parser()
+    print('args = ' + str(sys.argv))
+
+    for entry in os.scandir(args.directory):
+        if entry.is_dir() and not entry.name.startswith("."):
+            print('parsing directory ' + entry.name)
+            parse_directory(entry.name, args)
 
 if __name__ == '__main__':
     main()
