@@ -2,7 +2,13 @@
 <html>
     <table>
         {% for plot in plots %}
-            <tr><img src="{{plot.path}}"/></tr>
+            <tr>
+                <figure>
+                    <figcaption><b>{{plot.benchmark}}</b></figcaption>
+                    <img src="{{plot.path}}"/>
+                    <hr/>
+                </figure>
+            </tr>
         {% endfor %}
     </table>
 </html>
