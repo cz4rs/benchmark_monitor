@@ -16,6 +16,9 @@ from matplotlib import pyplot as plt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from textwrap import wrap
 
+import mpld3
+from mpld3 import plugins
+
 def ensureDir(file_path):
     directory = os.path.dirname(file_path)
     Path(directory).mkdir(parents=True, exist_ok=True)
@@ -181,10 +184,15 @@ def parse_directory(dir_name, args, env):
             smoothedValues = smooth(np.array(raw_values), args.medianfilter)
 
             # plot raw and smoothed values
-            plt.plot(raw_values, '-g', label="raw")
-            plt.plot(smoothedValues, '-b', label="smoothed")
-            plt.ylabel(metric)
-            plt.xlabel('sample #')
+            fig, ax = plt.subplots()
+            raw_points = ax.plot(
+                raw_values, color='green',
+                marker='o', markersize=10,
+                linestyle='dashed', label="raw"
+            )
+            ax.plot(smoothedValues, '-b', label="smoothed")
+            ax.set_ylabel(metric)
+            ax.set_xlabel('sample #')
 
             # plot line fit
             x_vals  = np.arange(0, len(raw_values), 1)
@@ -193,7 +201,7 @@ def parse_directory(dir_name, args, env):
             predict = np.poly1d(model)
             lrx     = range(0, len(x_vals))
             lry     = predict(lrx)
-            plt.plot(lrx, lry, 'tab:orange', label="linear regression")
+            ax.plot(lrx, lry, 'tab:orange', label="linear regression")
 
             # has it slowed down?
             if args.detectstepchanges and hasSlowedDown(benchmark, raw_values, smoothedValues, args.slidingwindow, args.alphavalue, metric):
@@ -221,11 +229,21 @@ def parse_directory(dir_name, args, env):
                 + ".png",
             )
             ensureDir(figurePath)
-            plt.tight_layout()
-            plt.savefig(figurePath)
-            plt.clf()
-            plotItem = dict(path=os.path.relpath(figurePath, args.outputdirectory), benchmark=benchmark)
+            fig.tight_layout()
+            fig.savefig(figurePath)
+            # FIXME: use git hashes when available
+            labels = ['<h1>{title}</h1>'.format(title=i) for i in range(sample_count)]
+            # FIXME:
+            # targets = ...
+            tooltip = plugins.PointHTMLTooltip(raw_points[0], labels)
+            plugins.connect(fig, tooltip)
+            plotItem = dict(
+                path=os.path.relpath(figurePath, args.outputdirectory),
+                benchmark=benchmark,
+                interactive=mpld3.fig_to_html(fig)
+            )
             plots.append(plotItem)
+            plt.close(fig)
 
     # generate report
     template = env.get_template('template.html')
@@ -240,7 +258,7 @@ def remove_special_characters(s):
 def main():
     args = create_parser()
     print('args = ' + str(sys.argv))
-    env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=select_autoescape(['html', 'xml']))
+    env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=False)
     env.globals['remove_special_characters'] = remove_special_characters
 
     dirs = []
