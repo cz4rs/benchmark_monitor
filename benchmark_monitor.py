@@ -45,6 +45,7 @@ def create_parser():
         ensureDir(args.outputdirectory)
     return args
 
+# TODO: add option to use the metric that starts with "FOM:"
 def parse_benchmark_file(file, benchmarks, metric):
     print('parsing ' + file)
 
@@ -114,6 +115,8 @@ def smooth(x,window_len=11,window='hanning'):
 
     if x.size < window_len:
         raise ValueError("Input vector needs to be bigger than window size.")
+        # TODO: consider removing that restriction and presenting less acurate plot
+        # window_len = x.size
 
     if window_len<3:
         return x
@@ -141,6 +144,7 @@ def parse_directory(dir_name, args, env):
         exit()
 
     # sort them in order of creation time (oldest to newest)
+    # FIXME: use date/time from the JSON file (context / date)
     files.sort(key=os.path.getmtime)
 
     # check if the user is addressing a subset of records using the range addressing scheme (startindex to endindex)
@@ -176,6 +180,7 @@ def parse_directory(dir_name, args, env):
             raw_values   = benchmarks[benchmark]
             sample_count = len(raw_values)
             print('found ' + str(sample_count) + ' benchmark records for benchmark ' + benchmark)
+            # TODO: consider removing that restriction and presenting less acurate plot
             if sample_count < 10 + args.slidingwindow:
                 print('BENCHMARK: ' + benchmark + ' needs more data, skipping...')
                 continue
@@ -230,10 +235,12 @@ def parse_directory(dir_name, args, env):
             )
             ensureDir(figurePath)
             fig.tight_layout()
+            # FIXME: decide which plot to use and remove redundant one
+            # interactive vs non-interactive
             fig.savefig(figurePath)
             # FIXME: use git hashes when available
             labels = ['<h1>{title}</h1>'.format(title=i) for i in range(sample_count)]
-            # FIXME:
+            # FIXME: link to the relevant commit when git hashes are available
             # targets = ...
             tooltip = plugins.PointHTMLTooltip(raw_points[0], labels)
             plugins.connect(fig, tooltip)
