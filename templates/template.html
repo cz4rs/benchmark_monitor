@@ -3,10 +3,7 @@
     <table>
         {% for plot in plots %}
             <tr>
-                <figure>
-                    <figcaption><b>{{plot.benchmark}}</b></figcaption>
-                    <img src="{{plot.path}}"/>
-                </figure>
+                <img src="{{plot.path}}"/>
                 {{plot.interactive}}
                 <hr/>
             </tr>

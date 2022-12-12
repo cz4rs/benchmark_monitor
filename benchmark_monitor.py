@@ -225,6 +225,7 @@ def parse_directory(dir_name, args, env):
                 else:
                     print('\tBENCHMARK ' + benchmark + ' step index is 0 - likely speedup, ignoring')
 
+            plt.title('\n'.join(wrap(benchmark, 50)))
             plt.legend(loc="upper left")
             figurePath = os.path.join(
                 args.outputdirectory,
@@ -246,7 +247,6 @@ def parse_directory(dir_name, args, env):
             plugins.connect(fig, tooltip)
             plotItem = dict(
                 path=os.path.relpath(figurePath, args.outputdirectory),
-                benchmark=benchmark,
                 interactive=mpld3.fig_to_html(fig)
             )
             plots.append(plotItem)
