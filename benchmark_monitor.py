@@ -227,26 +227,14 @@ def parse_directory(dir_name, args, env):
 
             plt.title('\n'.join(wrap(benchmark, 50)))
             plt.legend(loc="upper left")
-            figurePath = os.path.join(
-                args.outputdirectory,
-                remove_special_characters(dir_name),
-                remove_special_characters(benchmark)
-                + remove_special_characters(metric)
-                + ".png",
-            )
-            ensureDir(figurePath)
             fig.tight_layout()
-            # FIXME: decide which plot to use and remove redundant one
-            # interactive vs non-interactive
-            fig.savefig(figurePath)
             # FIXME: use git hashes when available
-            labels = ['<h1>{title}</h1>'.format(title=i) for i in range(sample_count)]
+            labels = ['<h1>#SHA-1-placeholder-{hash}</h1>'.format(hash=i) for i in range(sample_count)]
             # FIXME: link to the relevant commit when git hashes are available
-            # targets = ...
-            tooltip = plugins.PointHTMLTooltip(raw_points[0], labels)
+            targets = ['https://github.com/kokkos/kokkos/commit/{hash}'.format(hash='5ad6096') for i in range(sample_count)]
+            tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
             plugins.connect(fig, tooltip)
             plotItem = dict(
-                path=os.path.relpath(figurePath, args.outputdirectory),
                 interactive=mpld3.fig_to_html(fig)
             )
             plots.append(plotItem)
@@ -254,7 +242,10 @@ def parse_directory(dir_name, args, env):
 
     # generate report
     template = env.get_template('template.html')
-    outputFilePath = os.path.join(args.outputdirectory, remove_special_characters(dir_name) + '.html')
+    outputFilePath = os.path.join(
+        args.outputdirectory,
+        remove_special_characters(dir_name) + '.html'
+    )
     ensureDir(outputFilePath)
     with open(outputFilePath, 'w') as file:
         file.write(template.render(plots=plots))
