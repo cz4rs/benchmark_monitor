@@ -145,7 +145,8 @@ def parse_directory(dir_name, args, env):
 
     # sort them in order of creation time (oldest to newest)
     # FIXME: use date/time from the JSON file (context / date)
-    files.sort(key=os.path.getmtime)
+    # for now take the date/time from the file's name
+    files.sort(key=lambda file: file.name[-25:-5])
 
     # check if the user is addressing a subset of records using the range addressing scheme (startindex to endindex)
     if args.startindex != -1 and args.endindex != -1:
