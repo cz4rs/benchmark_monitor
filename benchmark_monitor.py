@@ -1,23 +1,23 @@
 #!/usr/bin/env python
 
 import argparse
-from argparse import ArgumentParser
 import json
 import math
 import os
 import re
-from pathlib import Path
-from scipy.stats import mannwhitneyu
-from scipy import stats
-from scipy import signal
 import sys
-import numpy as np
-from matplotlib import pyplot as plt
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from argparse import ArgumentParser
+from pathlib import Path
 from textwrap import wrap
 
 import mpld3
+import numpy as np
+from jinja2 import Environment, FileSystemLoader
+from matplotlib import pyplot as plt
 from mpld3 import plugins
+from scipy import signal, stats
+from scipy.stats import mannwhitneyu
+
 
 def ensureDir(file_path):
     directory = os.path.dirname(file_path)
@@ -247,8 +247,7 @@ def parse_directory(dir_name, args, env):
             plugins.connect(fig, tooltip)
 
             plotItem = dict(
-                interactive=mpld3.fig_to_html(fig)
-            )
+                interactive=mpld3.fig_to_html(fig))
             plots.append(plotItem)
             plt.close(fig)
 
@@ -256,8 +255,7 @@ def parse_directory(dir_name, args, env):
     template = env.get_template('template.html')
     outputFilePath = os.path.join(
         args.outputdirectory,
-        remove_special_characters(dir_name) + '.html'
-    )
+        remove_special_characters(dir_name) + '.html')
     ensureDir(outputFilePath)
     with open(outputFilePath, 'w') as file:
         file.write(template.render(plots=plots))
@@ -268,7 +266,12 @@ def remove_special_characters(s):
 def main():
     args = create_parser()
     print('args = ' + str(sys.argv))
-    env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')), autoescape=False)
+    env = Environment(
+        loader=FileSystemLoader(
+            os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                'templates')),
+        autoescape=False)
     env.globals['remove_special_characters'] = remove_special_characters
 
     dirs = []
