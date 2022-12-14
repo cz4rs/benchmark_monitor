@@ -34,7 +34,7 @@ def create_parser():
     parser.add_argument('-x', '--discard', help="(DEBUG) The number of (most recent) records to ignore. This is useful when wanting to debug scenarios in a sub region of the history", type=int, default=-1)
     parser.add_argument('-sx', '--startindex', help="(DEBUG - Alternative addressing scheme) The index to start the analysis at", type=int, default=-1)
     parser.add_argument('-ex', '--endindex', help="(DEBUG - Alternative addressing scheme) The index to end the analysis at", type=int, default=-1)
-    parser.add_argument('-m', '--metric', help="The benchmark metric(s) to track", default=["real_time"], nargs="*")
+    parser.add_argument('-m', '--metric', help="The benchmark metric(s) to track", default=[None], nargs="*")
     parser.add_argument('-o', '--outputdirectory', help="The index.html report output directory")
     parser.add_argument('-sc', '--detectstepchanges', help="Detect step changes", default=False, action="store_true")
     args = parser.parse_args()
@@ -45,7 +45,6 @@ def create_parser():
         ensureDir(args.outputdirectory)
     return args
 
-# TODO: add option to use the metric that starts with "FOM:"
 def parse_benchmark_file(file, benchmarks, metric, hashes):
     """ Parse a single benchmark file
     @param: benchmarks dictionary of lists where the key is the benchmark name
@@ -59,6 +58,11 @@ def parse_benchmark_file(file, benchmarks, metric, hashes):
         hashes.append(data['context']['GIT_COMMIT_HASH'])
 
         for b in data['benchmarks']:
+            if metric == None:
+                for key in b:
+                    if key.startswith("FOM"):
+                        metric = key
+
             print('\t' + b['name'] + "." + metric + ' = ' + str(b[metric]))
             if benchmarks.get(b['name']) is None:
                 benchmarks[b['name']] = [b[metric]]
