@@ -26,7 +26,7 @@ def ensureDir(file_path):
 def create_parser():
     parser = ArgumentParser(description='Generates a chart for each google benchmark across a benchmark history with optional step change detection.')
     parser.add_argument('-d', '--directory', help="Directory containing benchmark result json files to process")
-    parser.add_argument('-w', '--slidingwindow', help="The size of the benchmark comparison sliding window", type=int, default=6)
+    parser.add_argument('-w', '--slidingwindow', help="The size of the benchmark comparison sliding window", type=int, default=2)
     parser.add_argument('-s', '--maxsamples', help="The maximum number of benchmarks (including slidingwindow) to run analysis on (0 == all builds)", type=int, default=0)
     parser.add_argument('-f', '--medianfilter', help="The median filter kernel size i.e. the number of points around each data value to smooth accross in order to eliminate temporary peaks and troughs in benchmark performance", type=int, default=9)
     parser.add_argument('-a', '--alphavalue', help="The alpha value at which we reject the hypothesis that the sliding window of benchmarks equals the benchmark history. Typical value is around 0.05 to 0.01. The noisier the environment the lower this value should be.", type=float, default=0.05)
@@ -46,11 +46,18 @@ def create_parser():
     return args
 
 # TODO: add option to use the metric that starts with "FOM:"
-def parse_benchmark_file(file, benchmarks, metric):
+def parse_benchmark_file(file, benchmarks, metric, hashes):
+    """ Parse a single benchmark file
+    @param: benchmarks dictionary of lists where the key is the benchmark name
+            and the value is a list of values recorded for that benchmark/metric
+            accross all files
+    """
     print('parsing ' + file)
 
     with open(file) as json_file:
         data = json.load(json_file)
+        hashes.append(data['context']['GIT_COMMIT_HASH'])
+
         for b in data['benchmarks']:
             print('\t' + b['name'] + "." + metric + ' = ' + str(b[metric]))
             if benchmarks.get(b['name']) is None:
@@ -162,15 +169,15 @@ def parse_directory(dir_name, args, env):
             maxsamples = clamp(args.maxsamples, 0, fileCount)
             files      = files[fileCount-maxsamples-1:fileCount-1]
 
-    # parse them, return python dictionary of lists where the key is the benchmark name and the value is a python list of values recorded for that benchmark accross all files
     metrics    = args.metric
     plots      = []
     for metric in metrics:
         benchmarks = {}
+        hashes = []
         for entry in files:
             if entry.path.endswith('.json') and entry.is_file():
                 try:
-                    parse_benchmark_file(entry.path, benchmarks, metric)
+                    parse_benchmark_file(entry.path, benchmarks, metric, hashes)
                 except:
                     print('Corrupt benchmark file encountered, skipping...')
 
@@ -229,12 +236,12 @@ def parse_directory(dir_name, args, env):
             plt.title('\n'.join(wrap(benchmark, 50)))
             plt.legend(loc="upper left")
             fig.tight_layout()
-            # FIXME: use git hashes when available
-            labels = ['<h1>#SHA-1-placeholder-{hash}</h1>'.format(hash=i) for i in range(sample_count)]
-            # FIXME: link to the relevant commit when git hashes are available
-            targets = ['https://github.com/kokkos/kokkos/commit/{hash}'.format(hash='5ad6096') for i in range(sample_count)]
+
+            labels = ['<h2>#{hash}</h2>'.format(hash=hashes[i]) for i in range(sample_count)]
+            targets = ['https://github.com/kokkos/kokkos/commit/{hash}'.format(hash=hashes[i]) for i in range(sample_count)]
             tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
             plugins.connect(fig, tooltip)
+
             plotItem = dict(
                 interactive=mpld3.fig_to_html(fig)
             )
