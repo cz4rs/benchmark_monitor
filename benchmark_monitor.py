@@ -8,7 +8,7 @@ import re
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
-from textwrap import wrap
+from textwrap import fill
 
 import mpld3
 import numpy as np
@@ -237,7 +237,7 @@ def parse_directory(dir_name, args, env):
                 else:
                     print('\tBENCHMARK ' + benchmark + ' step index is 0 - likely speedup, ignoring')
 
-            plt.title('\n'.join(wrap(benchmark, 50)))
+            plt.title(fill(benchmark, 50))
             plt.legend(loc="upper left")
             fig.tight_layout()
 
