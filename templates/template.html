@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
     <table>
-        {% for plot in plots %}
+        {% for i in range(0, plots|length, 2) %}
             <tr>
-                {{plot.interactive}}
-                <hr/>
+                <td>{{plots[i].interactive}}</td>
+                <td>{{plots[i+1].interactive}}</td>
             </tr>
         {% endfor %}
     </table>
