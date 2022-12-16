@@ -119,18 +119,10 @@ def hasSlowedDown(benchmark, raw_values, smoothedvalues, slidingwindow, alphaval
         print('\tStep change doesnt appear to be part of a trend')
     return False
 
-def smooth(x,window_len=11,window='hanning'):
+def smooth(x, window_len, window='hanning'):
     # references: https://scipy-cookbook.readthedocs.io/items/SignalSmooth.html
     if x.ndim != 1:
         raise ValueError("smooth only accepts 1 dimension arrays.")
-
-    if x.size < window_len:
-        raise ValueError("Input vector needs to be bigger than window size.")
-        # TODO: consider removing that restriction and presenting less acurate plot
-        # window_len = x.size
-
-    if window_len<3:
-        return x
 
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
         raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
@@ -192,13 +184,12 @@ def parse_directory(dir_name, args, env):
             raw_values   = benchmarks[benchmark]
             sample_count = len(raw_values)
             print('found ' + str(sample_count) + ' benchmark records for benchmark ' + benchmark)
-            # TODO: consider removing that restriction and presenting less acurate plot
-            if sample_count < 10 + args.slidingwindow:
-                print('BENCHMARK: ' + benchmark + ' needs more data, skipping...')
-                continue
 
-            # apply a median filter to the data to smooth out temporary spikes
-            smoothedValues = smooth(np.array(raw_values), args.medianfilter)
+            if sample_count < 10 + args.slidingwindow:
+                print(
+                    'BENCHMARK: ' + benchmark + ' needs more data, '
+                    'skipping step change detection.')
+                args.detectstepchanges = False
 
             # plot raw and smoothed values
             fig, ax = plt.subplots()
@@ -207,18 +198,26 @@ def parse_directory(dir_name, args, env):
                 marker='o', markersize=10,
                 linestyle='dashed', label="raw"
             )
-            ax.plot(smoothedValues, '-b', label="smoothed")
             ax.set_ylabel(metric)
             ax.set_xlabel('sample #')
 
-            # plot line fit
-            x_vals  = np.arange(0, len(raw_values), 1)
-            y_vals  = raw_values
-            model   = np.polyfit(x_vals, y_vals, 1)
-            predict = np.poly1d(model)
-            lrx     = range(0, len(x_vals))
-            lry     = predict(lrx)
-            ax.plot(lrx, lry, 'tab:orange', label="linear regression")
+            if len(raw_values) >= args.medianfilter and args.medianfilter > 2:
+                # apply a median filter to smooth out temporary spikes
+                smoothedValues = smooth(np.array(raw_values), args.medianfilter)
+                ax.plot(smoothedValues, '-b', label="smoothed")
+
+                # plot line fit
+                x_vals  = np.arange(0, len(raw_values), 1)
+                y_vals  = raw_values
+                model   = np.polyfit(x_vals, y_vals, 1)
+                predict = np.poly1d(model)
+                lrx     = range(0, len(x_vals))
+                lry     = predict(lrx)
+                ax.plot(lrx, lry, 'tab:orange', label="linear regression")
+            else:
+                print(
+                    'BENCHMARK: ' + benchmark + ' needs more data, '
+                    'skipping smoothing and linear regression.')
 
             # has it slowed down?
             if args.detectstepchanges and hasSlowedDown(benchmark, raw_values, smoothedValues, args.slidingwindow, args.alphavalue, metric):
