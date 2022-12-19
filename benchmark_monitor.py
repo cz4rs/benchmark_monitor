@@ -45,7 +45,7 @@ def create_parser():
         ensureDir(args.outputdirectory)
     return args
 
-def parse_benchmark_file(file, benchmarks, metric, hashes):
+def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions):
     """ Parse a single benchmark file
     @param: benchmarks dictionary of lists where the key is the benchmark name
             and the value is a list of values recorded for that benchmark/metric
@@ -55,7 +55,8 @@ def parse_benchmark_file(file, benchmarks, metric, hashes):
 
     with open(file) as json_file:
         data = json.load(json_file)
-        hashes.append(data['context']['GIT_COMMIT_HASH'])
+        git_hashes.append(data['context']['GIT_COMMIT_HASH'])
+        git_descriptions.append(data['context']['GIT_COMMIT_DESCRIPTION'])
 
         for b in data['benchmarks']:
             if metric == None:
@@ -169,11 +170,15 @@ def parse_directory(dir_name, args, env):
     plots      = []
     for metric in metrics:
         benchmarks = {}
-        hashes = []
+        git_hashes = []
+        git_descriptions = []
+
         for entry in files:
             if entry.path.endswith('.json') and entry.is_file():
                 try:
-                    parse_benchmark_file(entry.path, benchmarks, metric, hashes)
+                    parse_benchmark_file(
+                        entry.path, benchmarks, metric,
+                        git_hashes, git_descriptions)
                 except:
                     print('Corrupt benchmark file encountered, skipping...')
 
@@ -240,8 +245,10 @@ def parse_directory(dir_name, args, env):
             plt.legend(loc="upper left")
             fig.tight_layout()
 
-            labels = ['<h2>#{hash}</h2>'.format(hash=hashes[i]) for i in range(sample_count)]
-            targets = ['https://github.com/kokkos/kokkos/commit/{hash}'.format(hash=hashes[i]) for i in range(sample_count)]
+            labels = ['<p><b>#{hash}</b></br>{desc}</p>'.format(
+                hash=git_hashes[i],
+                desc=fill(git_descriptions[i], 50)) for i in range(sample_count)]
+            targets = ['https://github.com/kokkos/kokkos/commit/{hash}'.format(hash=git_hashes[i]) for i in range(sample_count)]
             tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
             plugins.connect(fig, tooltip)
 
