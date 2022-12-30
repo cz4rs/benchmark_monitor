@@ -61,6 +61,9 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
                 for key in b:
                     if key.startswith("FOM"):
                         metric = key
+            # if there's no metric marked as a figure of merit, use real time
+            if metric == None:
+                metric = "real_time"
 
             print('\t' + b['name'] + "." + metric + ' = ' + str(b[metric]))
             if benchmarks.get(b['name']) is None:
