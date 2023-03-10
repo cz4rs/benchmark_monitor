@@ -247,6 +247,149 @@ def get_json_files(directory, args):
     return files
 
 
+def get_benchmarks(files, metric):
+    benchmarks = {}
+    git_hashes = []
+    git_descriptions = []
+
+    for entry in files:
+        if entry.path.endswith(".json") and entry.is_file():
+            try:
+                parse_benchmark_file(
+                    entry.path, benchmarks, metric, git_hashes, git_descriptions
+                )
+            except Exception as e:
+                print(
+                    f"Skipping corrupt benchmark file:\n"
+                    f"\t - file: {entry.path}\n"
+                    f"\t - exception: {e}"
+                )
+    return benchmarks, git_hashes, git_descriptions
+
+
+def analyse_benchmark(
+    benchmark,
+    metric,
+    raw_values,
+    git_hashes,
+    git_descriptions,
+    args,
+    plots,
+    output_subdir,
+    dir_name,
+):
+    # check we have enough records for this benchmark (if not then skip it)
+    sample_count = len(raw_values)
+    print(f"Found {str(sample_count)} benchmark records for benchmark {benchmark}")
+
+    if sample_count < 10 + args.slidingwindow:
+        print("\t - benchmark needs more data, skipping step change detection.")
+        args.detectstepchanges = False
+
+    # plot raw and smoothed values
+    fig, ax = plt.subplots()
+    raw_points = ax.plot(
+        raw_values,
+        color="green",
+        marker="o",
+        markersize=10,
+        linestyle="dashed",
+        label="raw",
+    )
+    ax.set_ylabel(metric)
+    ax.set_xlabel("sample #")
+
+    if len(raw_values) >= args.medianfilter and args.medianfilter > 2:
+        # apply a median filter to smooth out temporary spikes
+        smoothed_values = smooth(np.array(raw_values), args.medianfilter)
+        ax.plot(smoothed_values, "-b", label="smoothed")
+
+        # plot line fit
+        x_vals = np.arange(0, len(raw_values), 1)
+        y_vals = raw_values
+        model = np.polyfit(x_vals, y_vals, 1)
+        predict = np.poly1d(model)
+        lrx = range(0, len(x_vals))
+        lry = predict(lrx)
+        ax.plot(lrx, lry, "tab:orange", label="linear regression")
+    else:
+        print(
+            "\t - benchmark needs more data, "
+            "skipping smoothing and linear regression."
+        )
+
+    # has it slowed down?
+    if args.detectstepchanges and has_slowed_down(
+        benchmark,
+        raw_values,
+        smoothed_values,
+        args.slidingwindow,
+        args.alphavalue,
+    ):
+        # estimate step location
+        step_max_idx = estimate_step_location(smoothed_values)
+        if step_max_idx > 0 and step_max_idx < sample_count:
+            print("step_max_idx = " + str(step_max_idx))
+            if smoothed_values[step_max_idx + 1] > smoothed_values[step_max_idx - 1]:
+                print(
+                    "\tBENCHMARK "
+                    + benchmark
+                    + " STEP CHANGE IN PERFORMANCE ENCOUNTERED (SLOWDOWN) - likely occurred somewhere between this build and this build minus "
+                    + str(sample_count - step_max_idx)
+                    + "]"
+                )
+
+                # plot step location
+                plt.plot(
+                    (step_max_idx, step_max_idx),
+                    (np.min(raw_values), np.max(raw_values)),
+                    "r",
+                    label="slowdown location estimation",
+                )
+            else:
+                print(
+                    "\tBENCHMARK "
+                    + benchmark
+                    + " STEP CHANGE IN PERFORMANCE ENCOUNTERED (SPEEDUP) - ignoring"
+                )
+        else:
+            print(
+                "\tBENCHMARK "
+                + benchmark
+                + " step index is 0 - likely speedup, ignoring"
+            )
+
+    plt.title(fill(benchmark, 50))
+    plt.legend(loc="upper left")
+    fig.tight_layout()
+
+    labels = [
+        f"<p><b>#{git_hashes[i]}</b></br>{fill(git_descriptions[i], 50)}</p>"
+        for i in range(sample_count)
+    ]
+    targets = [
+        f"https://github.com/kokkos/kokkos/commit/{git_hashes[i]}"
+        for i in range(sample_count)
+    ]
+    tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
+    plugins.connect(fig, tooltip)
+
+    namename = os.path.join(
+        output_subdir, remove_special_characters(benchmark) + ".html"
+    )
+    mpld3.save_html(fig, namename)
+    plot_item = dict(
+        benchmark=benchmark,
+        path=os.path.join(
+            remove_special_characters(dir_name),
+            remove_special_characters(benchmark) + ".html",
+        ),
+    )
+    plots.append(plot_item)
+    plots = sorted(plots, key=lambda d: d["benchmark"])
+    plt.close(fig)
+
+
 def parse_directory(dir_name, args, env):
     print(f"Parsing directory {dir_name}")
     output_subdir = os.path.join(
@@ -260,140 +403,21 @@ def parse_directory(dir_name, args, env):
     metrics = args.metric
     plots = []
     for metric in metrics:
-        benchmarks = {}
-        git_hashes = []
-        git_descriptions = []
-
-        for entry in files:
-            if entry.path.endswith(".json") and entry.is_file():
-                try:
-                    parse_benchmark_file(
-                        entry.path, benchmarks, metric, git_hashes, git_descriptions
-                    )
-                except Exception as e:
-                    print(
-                        f"Skipping corrupt benchmark file:\n"
-                        f"\t - file: {entry.path}\n"
-                        f"\t - exception: {e}"
-                    )
+        benchmarks, git_hashes, git_descriptions = get_benchmarks(files, metric)
 
         # analyse benchmarks
         for benchmark, raw_values in benchmarks.items():
-            # check we have enough records for this benchmark (if not then skip it)
-            sample_count = len(raw_values)
-            print(
-                f"Found {str(sample_count)} benchmark records for benchmark {benchmark}"
-            )
-
-            if sample_count < 10 + args.slidingwindow:
-                print("\t - benchmark needs more data, skipping step change detection.")
-                args.detectstepchanges = False
-
-            # plot raw and smoothed values
-            fig, ax = plt.subplots()
-            raw_points = ax.plot(
-                raw_values,
-                color="green",
-                marker="o",
-                markersize=10,
-                linestyle="dashed",
-                label="raw",
-            )
-            ax.set_ylabel(metric)
-            ax.set_xlabel("sample #")
-
-            if len(raw_values) >= args.medianfilter and args.medianfilter > 2:
-                # apply a median filter to smooth out temporary spikes
-                smoothed_values = smooth(np.array(raw_values), args.medianfilter)
-                ax.plot(smoothed_values, "-b", label="smoothed")
-
-                # plot line fit
-                x_vals = np.arange(0, len(raw_values), 1)
-                y_vals = raw_values
-                model = np.polyfit(x_vals, y_vals, 1)
-                predict = np.poly1d(model)
-                lrx = range(0, len(x_vals))
-                lry = predict(lrx)
-                ax.plot(lrx, lry, "tab:orange", label="linear regression")
-            else:
-                print(
-                    "\t - benchmark needs more data, "
-                    "skipping smoothing and linear regression."
-                )
-
-            # has it slowed down?
-            if args.detectstepchanges and has_slowed_down(
+            analyse_benchmark(
                 benchmark,
+                metric,
                 raw_values,
-                smoothed_values,
-                args.slidingwindow,
-                args.alphavalue,
-            ):
-                # estimate step location
-                step_max_idx = estimate_step_location(smoothed_values)
-                if step_max_idx > 0 and step_max_idx < sample_count:
-                    print("step_max_idx = " + str(step_max_idx))
-                    if (
-                        smoothed_values[step_max_idx + 1]
-                        > smoothed_values[step_max_idx - 1]
-                    ):
-                        print(
-                            "\tBENCHMARK "
-                            + benchmark
-                            + " STEP CHANGE IN PERFORMANCE ENCOUNTERED (SLOWDOWN) - likely occurred somewhere between this build and this build minus "
-                            + str(sample_count - step_max_idx)
-                            + "]"
-                        )
-
-                        # plot step location
-                        plt.plot(
-                            (step_max_idx, step_max_idx),
-                            (np.min(raw_values), np.max(raw_values)),
-                            "r",
-                            label="slowdown location estimation",
-                        )
-                    else:
-                        print(
-                            "\tBENCHMARK "
-                            + benchmark
-                            + " STEP CHANGE IN PERFORMANCE ENCOUNTERED (SPEEDUP) - ignoring"
-                        )
-                else:
-                    print(
-                        "\tBENCHMARK "
-                        + benchmark
-                        + " step index is 0 - likely speedup, ignoring"
-                    )
-
-            plt.title(fill(benchmark, 50))
-            plt.legend(loc="upper left")
-            fig.tight_layout()
-
-            labels = [
-                f"<p><b>#{git_hashes[i]}</b></br>{fill(git_descriptions[i], 50)}</p>"
-                for i in range(sample_count)
-            ]
-            targets = [
-                f"https://github.com/kokkos/kokkos/commit/{git_hashes[i]}"
-                for i in range(sample_count)
-            ]
-            tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
-            plugins.connect(fig, tooltip)
-
-            namename = os.path.join(
-                output_subdir, remove_special_characters(benchmark) + ".html"
+                git_hashes,
+                git_descriptions,
+                args,
+                plots,
+                output_subdir,
+                dir_name,
             )
-            mpld3.save_html(fig, namename)
-            plot_item = dict(
-                benchmark=benchmark,
-                path=os.path.join(
-                    remove_special_characters(dir_name),
-                    remove_special_characters(benchmark) + ".html",
-                ),
-            )
-            plots.append(plot_item)
-            plots = sorted(plots, key=lambda d: d["benchmark"])
-            plt.close(fig)
 
     # generate report
     template = env.get_template("benchmarks.html")
