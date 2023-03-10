@@ -276,7 +276,6 @@ def analyse_benchmark(
     git_hashes,
     git_descriptions,
     args,
-    plots,
     output_subdir,
     dir_name,
 ):
@@ -376,19 +375,19 @@ def analyse_benchmark(
     tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
     plugins.connect(fig, tooltip)
 
-    namename = os.path.join(
+    plot_file = os.path.join(
         output_subdir, remove_special_characters(benchmark) + ".html"
     )
-    mpld3.save_html(fig, namename)
-    plot_item = dict(
-        benchmark=benchmark,
-        path=os.path.join(
+    mpld3.save_html(fig, plot_file)
+    plt.close(fig)
+
+    return {
+        "benchmark": benchmark,
+        "path": os.path.join(
             remove_special_characters(dir_name),
             remove_special_characters(benchmark) + ".html",
         ),
-    )
-    plots.append(plot_item)
-    plt.close(fig)
+    }
 
 
 def parse_directory(dir_name, args, env):
@@ -401,11 +400,11 @@ def parse_directory(dir_name, args, env):
     # get list of files to parse
     files = get_json_files(os.path.join(args.directory, dir_name), args)
 
-    plots = []
+    # get benchmark results and corresponding git information
     benchmarks, git_hashes, git_descriptions = get_benchmarks(files, args.metric)
 
     # analyse benchmarks
-    for benchmark, raw_values in benchmarks.items():
+    plots = [
         analyse_benchmark(
             benchmark,
             args.metric,
@@ -413,10 +412,11 @@ def parse_directory(dir_name, args, env):
             git_hashes,
             git_descriptions,
             args,
-            plots,
             output_subdir,
             dir_name,
         )
+        for benchmark, raw_values in benchmarks.items()
+    ]
 
     # generate report
     template = env.get_template("benchmarks.html")
