@@ -90,9 +90,8 @@ def parse_arguments():
     parser.add_argument(
         "-m",
         "--metric",
-        help="The benchmark metric(s) to track",
-        default=[None],
-        nargs="*",
+        help="The benchmark metric to track",
+        default=None,
     )
     parser.add_argument(
         "-o",
@@ -131,6 +130,7 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
                 for key in b:
                     if key.startswith("FOM"):
                         metric = key
+                        break
             # if there's no metric marked as a figure of merit, use real time
             if metric is None:
                 metric = "real_time"
@@ -400,24 +400,22 @@ def parse_directory(dir_name, args, env):
     # get list of files to parse
     files = get_json_files(os.path.join(args.directory, dir_name), args)
 
-    metrics = args.metric
     plots = []
-    for metric in metrics:
-        benchmarks, git_hashes, git_descriptions = get_benchmarks(files, metric)
+    benchmarks, git_hashes, git_descriptions = get_benchmarks(files, args.metric)
 
-        # analyse benchmarks
-        for benchmark, raw_values in benchmarks.items():
-            analyse_benchmark(
-                benchmark,
-                metric,
-                raw_values,
-                git_hashes,
-                git_descriptions,
-                args,
-                plots,
-                output_subdir,
-                dir_name,
-            )
+    # analyse benchmarks
+    for benchmark, raw_values in benchmarks.items():
+        analyse_benchmark(
+            benchmark,
+            args.metric,
+            raw_values,
+            git_hashes,
+            git_descriptions,
+            args,
+            plots,
+            output_subdir,
+            dir_name,
+        )
 
     # generate report
     template = env.get_template("benchmarks.html")
