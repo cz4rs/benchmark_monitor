@@ -21,9 +21,9 @@ def ensureDir(file_path):
     directory = os.path.dirname(file_path)
     Path(directory).mkdir(parents=True, exist_ok=True)
 
-def create_parser():
+def parse_arguments():
     parser = ArgumentParser(description='Generates a chart for each google benchmark across a benchmark history with optional step change detection.')
-    parser.add_argument('-d', '--directory', help="Directory containing benchmark result json files to process")
+    parser.add_argument('-d', '--directory', help="Directory containing benchmark result json files to process", default=os.getcwd())
     parser.add_argument('-w', '--slidingwindow', help="The size of the benchmark comparison sliding window", type=int, default=2)
     parser.add_argument('-s', '--maxsamples', help="The maximum number of benchmarks (including slidingwindow) to run analysis on (0 == all builds)", type=int, default=0)
     parser.add_argument('-f', '--medianfilter', help="The median filter kernel size i.e. the number of points around each data value to smooth accross in order to eliminate temporary peaks and troughs in benchmark performance", type=int, default=9)
@@ -33,15 +33,9 @@ def create_parser():
     parser.add_argument('-sx', '--startindex', help="(DEBUG - Alternative addressing scheme) The index to start the analysis at", type=int, default=-1)
     parser.add_argument('-ex', '--endindex', help="(DEBUG - Alternative addressing scheme) The index to end the analysis at", type=int, default=-1)
     parser.add_argument('-m', '--metric', help="The benchmark metric(s) to track", default=[None], nargs="*")
-    parser.add_argument('-o', '--outputdirectory', help="The index.html report output directory")
+    parser.add_argument('-o', '--outputdirectory', help="The index.html report output directory", default=os.getcwd())
     parser.add_argument('-sc', '--detectstepchanges', help="Detect step changes", default=False, action="store_true")
-    args = parser.parse_args()
-    if args.directory is None:
-        args.directory = os.getcwd()
-    if args.outputdirectory is None:
-        args.outputdirectory = os.getcwd()
-        ensureDir(args.outputdirectory)
-    return args
+    return parser.parse_args()
 
 def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions):
     """ Parse a single benchmark file
@@ -271,7 +265,7 @@ def remove_special_characters(s):
     return re.sub(r'[^\w_. -]', '_', s)
 
 def main():
-    args = create_parser()
+    args = parse_arguments()
     print('args = ' + str(sys.argv))
     env = Environment(
         loader=FileSystemLoader(
