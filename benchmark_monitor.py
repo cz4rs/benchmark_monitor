@@ -124,13 +124,15 @@ def get_metric(metric, benchmark_result):
 
 
 def parse_benchmark_file(
-    file, benchmarks: dict[str, list[float]], metric, git_hashes, git_descriptions
+    file, benchmarks: dict[str, list[float]], metric, git_hashes, git_descriptions, metrics
 ):
     """Parse a single benchmark file
     @param: benchmarks where the key is the benchmark name
             and the value is a list of values recorded for that benchmark/metric
             accross all files
     """
+    # FIXME: use a dict[str, some_struct] for benchmarks
+    # some_struct -> BenchmarkData -> name, metric, values
     # print("parsing " + file)
 
     with open(file, "r", encoding="utf8") as json_file:
@@ -141,6 +143,7 @@ def parse_benchmark_file(
         for benchmark_result in data["benchmarks"]:
             benchmark_metric = get_metric(metric, benchmark_result)
             benchmark_name = benchmark_result["name"]
+            metrics[benchmark_name] = benchmark_metric
             benchmarks[benchmark_name].append(benchmark_result[benchmark_metric])
 
 
@@ -253,12 +256,13 @@ def get_benchmarks(files, metric):
     benchmarks: dict[str, list[float]] = defaultdict(list)
     git_hashes = []
     git_descriptions = []
+    metrics = {}
 
     for entry in files:
         if entry.path.endswith(".json") and entry.is_file():
             try:
                 parse_benchmark_file(
-                    entry.path, benchmarks, metric, git_hashes, git_descriptions
+                    entry.path, benchmarks, metric, git_hashes, git_descriptions, metrics
                 )
             except Exception as e:
                 print(
@@ -266,12 +270,12 @@ def get_benchmarks(files, metric):
                     f"\t - file: {entry.path}\n"
                     f"\t - exception: {e}"
                 )
-    return benchmarks, git_hashes, git_descriptions
+    return benchmarks, git_hashes, git_descriptions, metrics
 
 
 def analyse_benchmark(
     benchmark,
-    metric,
+    metrics,
     raw_values,
     git_hashes,
     git_descriptions,
@@ -297,7 +301,7 @@ def analyse_benchmark(
         linestyle="dashed",
         label="raw",
     )
-    ax.set_ylabel(metric)
+    ax.set_ylabel(metrics[benchmark])  # FIXME: we use `get_metric` to decide which metric to use
     ax.set_xlabel("sample #")
 
     if len(raw_values) >= args.medianfilter and args.medianfilter > 2:
@@ -401,13 +405,13 @@ def parse_directory(dir_name, args, env):
     files = get_json_files(os.path.join(args.directory, dir_name), args)
 
     # get benchmark results and corresponding git information
-    benchmarks, git_hashes, git_descriptions = get_benchmarks(files, args.metric)
+    benchmarks, git_hashes, git_descriptions, metrics = get_benchmarks(files, args.metric)
 
     # analyse benchmarks
     plots = [
         analyse_benchmark(
             benchmark,
-            args.metric,
+            metrics,  # FIXME: we use `get_metric` to decide which metric to use
             raw_values,
             git_hashes,
             git_descriptions,
