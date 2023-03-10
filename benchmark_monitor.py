@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from argparse import ArgumentParser
+from collections import defaultdict
 from pathlib import Path
 from textwrap import fill
 
@@ -112,9 +113,21 @@ def parse_arguments():
     return args
 
 
-def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions):
+def get_metric(metric, benchmark_result):
+    if metric is None:
+        for key in benchmark_result:
+            if key.startswith("FOM"):
+                return key
+
+    # if there's no metric marked as a figure of merit, use real time
+    return metric if metric is not None else "real_time"
+
+
+def parse_benchmark_file(
+    file, benchmarks: dict[str, list[float]], metric, git_hashes, git_descriptions
+):
     """Parse a single benchmark file
-    @param: benchmarks dictionary of lists where the key is the benchmark name
+    @param: benchmarks where the key is the benchmark name
             and the value is a list of values recorded for that benchmark/metric
             accross all files
     """
@@ -125,21 +138,10 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
         git_hashes.append(data["context"]["GIT_COMMIT_HASH"])
         git_descriptions.append(data["context"]["GIT_COMMIT_DESCRIPTION"])
 
-        for b in data["benchmarks"]:
-            if metric is None:
-                for key in b:
-                    if key.startswith("FOM"):
-                        metric = key
-                        break
-            # if there's no metric marked as a figure of merit, use real time
-            if metric is None:
-                metric = "real_time"
-
-            # print("\t" + b["name"] + "." + metric + " = " + str(b[metric]))
-            if benchmarks.get(b["name"]) is None:
-                benchmarks[b["name"]] = [b[metric]]
-            else:
-                benchmarks[b["name"]].append(b[metric])
+        for benchmark_result in data["benchmarks"]:
+            benchmark_metric = get_metric(metric, benchmark_result)
+            benchmark_name = benchmark_result["name"]
+            benchmarks[benchmark_name].append(benchmark_result[benchmark_metric])
 
 
 def clamp(n, smallest, largest):
@@ -248,7 +250,7 @@ def get_json_files(directory, args):
 
 
 def get_benchmarks(files, metric):
-    benchmarks = {}
+    benchmarks: dict[str, list[float]] = defaultdict(list)
     git_hashes = []
     git_descriptions = []
 
@@ -386,7 +388,6 @@ def analyse_benchmark(
         ),
     )
     plots.append(plot_item)
-    plots = sorted(plots, key=lambda d: d["benchmark"])
     plt.close(fig)
 
 
@@ -422,6 +423,7 @@ def parse_directory(dir_name, args, env):
     output_file_path = os.path.join(
         args.outputdirectory, remove_special_characters(dir_name) + ".html"
     )
+    plots = sorted(plots, key=lambda d: d["benchmark"])
     with open(output_file_path, "w", encoding="utf8") as file:
         file.write(template.render(plots=plots))
 
