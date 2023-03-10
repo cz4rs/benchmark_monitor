@@ -23,6 +23,8 @@ def ensure_dir(file_path):
 
 
 def parse_arguments():
+    print("args = " + str(sys.argv))
+
     parser = ArgumentParser(
         description="Generates a chart for each google benchmark across a benchmark history with optional step change detection."
     )
@@ -211,6 +213,8 @@ def smooth(x, window_len):
 
 
 def parse_directory(dir_name, args, env):
+    print(f"Parsing directory {dir_name}")
+
     # get list of files to parse
     files = []
     for entry in os.scandir(os.path.join(args.directory, dir_name)):
@@ -382,10 +386,15 @@ def parse_directory(dir_name, args, env):
 def remove_special_characters(s):
     return re.sub(r"[^\w_. -]", "_", s)
 
+def parse_subdirectories(args, env):
+    subdirectories = []
+    for entry in os.scandir(args.directory):
+        if entry.is_dir() and not entry.name.startswith("."):
+            parse_directory(entry.name, args, env)
+            subdirectories.append(entry.name)
+    return subdirectories
 
-def main():
-    args = parse_arguments()
-    print("args = " + str(sys.argv))
+def get_jinja_environment():
     env = Environment(
         loader=FileSystemLoader(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "templates")
@@ -393,20 +402,20 @@ def main():
         autoescape=False,
     )
     env.globals["remove_special_characters"] = remove_special_characters
+    return env
 
-    dirs = []
-    for entry in os.scandir(args.directory):
-        if entry.is_dir() and not entry.name.startswith("."):
-            print("parsing directory " + entry.name)
-            parse_directory(entry.name, args, env)
-            dirs.append(entry.name)
-
+def create_index_file(output_dir, subdirectories, env):
     template = env.get_template("index_template.html")
-    index_file_path = os.path.join(args.outputdirectory, "index.html")
+    index_file_path = os.path.join(output_dir, "index.html")
     ensure_dir(index_file_path)
     with open(index_file_path, "w", encoding="utf8") as file:
-        file.write(template.render(dirs=dirs))
+        file.write(template.render(dirs=subdirectories))
 
+def main():
+    args = parse_arguments()
+    env = get_jinja_environment()
+    sub_dirs = parse_subdirectories(args, env)
+    create_index_file(args.outputdirectory, sub_dirs, env)
 
 if __name__ == "__main__":
     main()
