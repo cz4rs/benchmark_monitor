@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        ul.circle {
+            list-style-type: circle;
+        }
+    </style>
+</head>
+
+<body>
+    <ul class="circle">
+        {% for plot in plots %}
+        <li><a href="{{plot.path}}">{{plot.benchmark}}</li>
+        {% endfor %}
+    </ul>
+</body>
+
+</html>

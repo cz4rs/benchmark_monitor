@@ -17,8 +17,7 @@ from scipy import stats
 from scipy.stats import mannwhitneyu
 
 
-def ensure_dir(file_path):
-    directory = os.path.dirname(file_path)
+def ensure_dir(directory):
     Path(directory).mkdir(parents=True, exist_ok=True)
 
 
@@ -108,7 +107,10 @@ def parse_arguments():
         default=False,
         action="store_true",
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    ensure_dir(args.outputdirectory)
+    return args
 
 
 def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions):
@@ -211,6 +213,7 @@ def smooth(x, window_len):
 
     return y[0 : len(x)]
 
+
 def get_json_files(directory, args):
     files = []
     for entry in os.scandir(directory):
@@ -243,8 +246,13 @@ def get_json_files(directory, args):
 
     return files
 
+
 def parse_directory(dir_name, args, env):
     print(f"Parsing directory {dir_name}")
+    output_subdir = os.path.join(
+        args.outputdirectory, remove_special_characters(dir_name)
+    )
+    ensure_dir(output_subdir)
 
     # get list of files to parse
     files = get_json_files(os.path.join(args.directory, dir_name), args)
@@ -263,9 +271,11 @@ def parse_directory(dir_name, args, env):
                         entry.path, benchmarks, metric, git_hashes, git_descriptions
                     )
                 except Exception as e:
-                    print(f"Skipping corrupt benchmark file:\n"
-                          f"\t - file: {entry.path}\n"
-                          f"\t - exception: {e}")
+                    print(
+                        f"Skipping corrupt benchmark file:\n"
+                        f"\t - file: {entry.path}\n"
+                        f"\t - exception: {e}"
+                    )
 
         # analyse benchmarks
         for benchmark, raw_values in benchmarks.items():
@@ -276,9 +286,7 @@ def parse_directory(dir_name, args, env):
             )
 
             if sample_count < 10 + args.slidingwindow:
-                print(
-                    "\t - benchmark needs more data, skipping step change detection."
-                )
+                print("\t - benchmark needs more data, skipping step change detection.")
                 args.detectstepchanges = False
 
             # plot raw and smoothed values
@@ -372,22 +380,33 @@ def parse_directory(dir_name, args, env):
             tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
             plugins.connect(fig, tooltip)
 
-            plot_item = dict(interactive=mpld3.fig_to_html(fig))
+            namename = os.path.join(
+                output_subdir, remove_special_characters(benchmark) + ".html"
+            )
+            mpld3.save_html(fig, namename)
+            plot_item = dict(
+                benchmark=benchmark,
+                path=os.path.join(
+                    remove_special_characters(dir_name),
+                    remove_special_characters(benchmark) + ".html",
+                ),
+            )
             plots.append(plot_item)
+            plots = sorted(plots, key=lambda d: d["benchmark"])
             plt.close(fig)
 
     # generate report
-    template = env.get_template("template.html")
+    template = env.get_template("benchmarks.html")
     output_file_path = os.path.join(
         args.outputdirectory, remove_special_characters(dir_name) + ".html"
     )
-    ensure_dir(output_file_path)
     with open(output_file_path, "w", encoding="utf8") as file:
         file.write(template.render(plots=plots))
 
 
 def remove_special_characters(s):
     return re.sub(r"[^\w_. -]", "_", s)
+
 
 def parse_subdirectories(args, env):
     subdirectories = []
@@ -396,6 +415,7 @@ def parse_subdirectories(args, env):
             parse_directory(entry.name, args, env)
             subdirectories.append(entry.name)
     return subdirectories
+
 
 def get_jinja_environment():
     env = Environment(
@@ -407,18 +427,20 @@ def get_jinja_environment():
     env.globals["remove_special_characters"] = remove_special_characters
     return env
 
+
 def create_index_file(output_dir, subdirectories, env):
-    template = env.get_template("index_template.html")
+    template = env.get_template("index.html")
     index_file_path = os.path.join(output_dir, "index.html")
-    ensure_dir(index_file_path)
     with open(index_file_path, "w", encoding="utf8") as file:
         file.write(template.render(dirs=subdirectories))
+
 
 def main():
     args = parse_arguments()
     env = get_jinja_environment()
     sub_dirs = parse_subdirectories(args, env)
     create_index_file(args.outputdirectory, sub_dirs, env)
+
 
 if __name__ == "__main__":
     main()
