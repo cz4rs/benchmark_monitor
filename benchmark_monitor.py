@@ -13,11 +13,11 @@ import numpy as np
 from jinja2 import Environment, FileSystemLoader
 from matplotlib import pyplot as plt
 from mpld3 import plugins
-from scipy import signal, stats
+from scipy import stats
 from scipy.stats import mannwhitneyu
 
 
-def ensureDir(file_path):
+def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
     Path(directory).mkdir(parents=True, exist_ok=True)
 
@@ -117,18 +117,18 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
     """
     print("parsing " + file)
 
-    with open(file) as json_file:
+    with open(file, "r", encoding="utf8") as json_file:
         data = json.load(json_file)
         git_hashes.append(data["context"]["GIT_COMMIT_HASH"])
         git_descriptions.append(data["context"]["GIT_COMMIT_DESCRIPTION"])
 
         for b in data["benchmarks"]:
-            if metric == None:
+            if metric is None:
                 for key in b:
                     if key.startswith("FOM"):
                         metric = key
             # if there's no metric marked as a figure of merit, use real time
-            if metric == None:
+            if metric is None:
                 metric = "real_time"
 
             print("\t" + b["name"] + "." + metric + " = " + str(b[metric]))
@@ -153,8 +153,8 @@ def turningpoints(x):
     return peaks, troughs
 
 
-def estimateStepLocation(values):
-    # references: https://stackoverflow.com/questions/48000663/step-detection-in-one-dimensional-data/48001937)
+def estimate_step_location(values):
+    # https://stackoverflow.com/questions/48000663/step-detection-in-one-dimensional-data/48001937)
     dary = np.array(values)
     avg = np.average(dary)
     dary -= avg
@@ -163,7 +163,7 @@ def estimateStepLocation(values):
     print(np.argmax(dary_step))
 
     # get location of step change
-    peaks, troughs = turningpoints(dary_step)
+    peaks, _ = turningpoints(dary_step)
     if (len(peaks)) == 0:
         return 0
 
@@ -171,12 +171,9 @@ def estimateStepLocation(values):
     return step_max_idx
 
 
-def hasSlowedDown(
-    benchmark, raw_values, smoothedvalues, slidingwindow, alphavalue, metric
-):
+def has_slowed_down(benchmark, raw_values, smoothedvalues, slidingwindow, alphavalue):
     sample_count = len(raw_values)
     sample_a_len = sample_count - slidingwindow
-    sample_b_len = slidingwindow
 
     # mw test
     sample_a = smoothedvalues[:sample_a_len]
@@ -188,11 +185,12 @@ def hasSlowedDown(
         + str(len(sample_b))
     )
     stat, p = mannwhitneyu(sample_a, sample_b)
-    print("BENCHMARK " + benchmark + " STATS=%.3f, p=%.3f" % (stat, p))
+    print(f"BENCHMARK {benchmark} STATS={stat:.3f}, p={p:.3f}")
     if p < alphavalue:
         print("\tStep change possibly found, performing t-test...")
 
-        # confirm with Welch's t-test as mw can reject if sd is big (see: https://thestatsgeek.com/2014/04/12/is-the-wilcoxon-mann-whitney-test-a-good-non-parametric-alternative-to-the-t-test/)
+        # confirm with Welch's t-test as mw can reject if sd is big
+        # https://thestatsgeek.com/2014/04/12/is-the-wilcoxon-mann-whitney-test-a-good-non-parametric-alternative-to-the-t-test/
         stat, p = stats.ttest_ind(sample_a, sample_b, equal_var=False)
         if p < alphavalue:
             return True
@@ -205,7 +203,7 @@ def smooth(x, window_len, window="hanning"):
     if x.ndim != 1:
         raise ValueError("smooth only accepts 1 dimension arrays.")
 
-    if not window in ["flat", "hanning", "hamming", "bartlett", "blackman"]:
+    if window not in ["flat", "hanning", "hamming", "bartlett", "blackman"]:
         raise ValueError(
             "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
         )
@@ -262,13 +260,13 @@ def parse_directory(dir_name, args, env):
                     parse_benchmark_file(
                         entry.path, benchmarks, metric, git_hashes, git_descriptions
                     )
-                except:
+                except Exception as e:
                     print("Corrupt benchmark file encountered, skipping...")
+                    print(e)
 
         # analyse benchmarks
-        for benchmark in benchmarks:
+        for benchmark, raw_values in benchmarks.items():
             # check we have enough records for this benchmark (if not then skip it)
-            raw_values = benchmarks[benchmark]
             sample_count = len(raw_values)
             print(
                 "found "
@@ -299,8 +297,8 @@ def parse_directory(dir_name, args, env):
 
             if len(raw_values) >= args.medianfilter and args.medianfilter > 2:
                 # apply a median filter to smooth out temporary spikes
-                smoothedValues = smooth(np.array(raw_values), args.medianfilter)
-                ax.plot(smoothedValues, "-b", label="smoothed")
+                smoothed_values = smooth(np.array(raw_values), args.medianfilter)
+                ax.plot(smoothed_values, "-b", label="smoothed")
 
                 # plot line fit
                 x_vals = np.arange(0, len(raw_values), 1)
@@ -317,21 +315,20 @@ def parse_directory(dir_name, args, env):
                 )
 
             # has it slowed down?
-            if args.detectstepchanges and hasSlowedDown(
+            if args.detectstepchanges and has_slowed_down(
                 benchmark,
                 raw_values,
-                smoothedValues,
+                smoothed_values,
                 args.slidingwindow,
                 args.alphavalue,
-                metric,
             ):
                 # estimate step location
-                step_max_idx = estimateStepLocation(smoothedValues)
+                step_max_idx = estimate_step_location(smoothed_values)
                 if step_max_idx > 0 and step_max_idx < sample_count:
                     print("step_max_idx = " + str(step_max_idx))
                     if (
-                        smoothedValues[step_max_idx + 1]
-                        > smoothedValues[step_max_idx - 1]
+                        smoothed_values[step_max_idx + 1]
+                        > smoothed_values[step_max_idx - 1]
                     ):
                         print(
                             "\tBENCHMARK "
@@ -366,31 +363,27 @@ def parse_directory(dir_name, args, env):
             fig.tight_layout()
 
             labels = [
-                "<p><b>#{hash}</b></br>{desc}</p>".format(
-                    hash=git_hashes[i], desc=fill(git_descriptions[i], 50)
-                )
+                f"<p><b>#{git_hashes[i]}</b></br>{fill(git_descriptions[i], 50)}</p>"
                 for i in range(sample_count)
             ]
             targets = [
-                "https://github.com/kokkos/kokkos/commit/{hash}".format(
-                    hash=git_hashes[i]
-                )
+                f"https://github.com/kokkos/kokkos/commit/{git_hashes[i]}"
                 for i in range(sample_count)
             ]
             tooltip = plugins.PointHTMLTooltip(raw_points[0], labels, targets)
             plugins.connect(fig, tooltip)
 
-            plotItem = dict(interactive=mpld3.fig_to_html(fig))
-            plots.append(plotItem)
+            plot_item = dict(interactive=mpld3.fig_to_html(fig))
+            plots.append(plot_item)
             plt.close(fig)
 
     # generate report
     template = env.get_template("template.html")
-    outputFilePath = os.path.join(
+    output_file_path = os.path.join(
         args.outputdirectory, remove_special_characters(dir_name) + ".html"
     )
-    ensureDir(outputFilePath)
-    with open(outputFilePath, "w") as file:
+    ensure_dir(output_file_path)
+    with open(output_file_path, "w", encoding="utf8") as file:
         file.write(template.render(plots=plots))
 
 
@@ -417,9 +410,9 @@ def main():
             dirs.append(entry.name)
 
     template = env.get_template("index_template.html")
-    outputFilePath = os.path.join(args.outputdirectory, "index.html")
-    ensureDir(outputFilePath)
-    with open(outputFilePath, "w") as file:
+    index_file_path = os.path.join(args.outputdirectory, "index.html")
+    ensure_dir(index_file_path)
+    with open(index_file_path, "w", encoding="utf8") as file:
         file.write(template.render(dirs=dirs))
 
 
