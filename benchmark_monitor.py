@@ -117,7 +117,7 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
             and the value is a list of values recorded for that benchmark/metric
             accross all files
     """
-    print("parsing " + file)
+    # print("parsing " + file)
 
     with open(file, "r", encoding="utf8") as json_file:
         data = json.load(json_file)
@@ -133,7 +133,7 @@ def parse_benchmark_file(file, benchmarks, metric, git_hashes, git_descriptions)
             if metric is None:
                 metric = "real_time"
 
-            print("\t" + b["name"] + "." + metric + " = " + str(b[metric]))
+            # print("\t" + b["name"] + "." + metric + " = " + str(b[metric]))
             if benchmarks.get(b["name"]) is None:
                 benchmarks[b["name"]] = [b[metric]]
             else:
@@ -263,8 +263,9 @@ def parse_directory(dir_name, args, env):
                         entry.path, benchmarks, metric, git_hashes, git_descriptions
                     )
                 except Exception as e:
-                    print(f"Corrupt benchmark file encountered, skipping: {entry.path}")
-                    print(e)
+                    print(f"Skipping corrupt benchmark file:\n"
+                          f"\t - file: {entry.path}\n"
+                          f"\t - exception: {e}")
 
         # analyse benchmarks
         for benchmark, raw_values in benchmarks.items():
