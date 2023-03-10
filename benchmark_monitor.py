@@ -211,25 +211,23 @@ def smooth(x, window_len):
 
     return y[0 : len(x)]
 
-
-def parse_directory(dir_name, args, env):
-    print(f"Parsing directory {dir_name}")
-
-    # get list of files to parse
+def get_json_files(directory, args):
     files = []
-    for entry in os.scandir(os.path.join(args.directory, dir_name)):
+    for entry in os.scandir(directory):
         if entry.path.endswith(".json") and entry.is_file():
             files.append(entry)
+
     if len(files) == 0:
         print("no benchmark data")
         exit()
 
-    # sort them in order of creation time (oldest to newest)
+    # sort files in order of creation time (oldest to newest)
     # FIXME: use date/time from the JSON file (context / date)
     # for now take the date/time from the file's name
     files.sort(key=lambda file: file.name[-25:-5])
 
-    # check if the user is addressing a subset of records using the range addressing scheme (startindex to endindex)
+    # check if the user is addressing a subset of records using the range addressing scheme
+    # (startindex to endindex)
     if args.startindex != -1 and args.endindex != -1:
         files = files[args.startindex : args.endindex]
     else:
@@ -239,9 +237,17 @@ def parse_directory(dir_name, args, env):
 
         # limit the number of test samples
         if args.maxsamples != 0:
-            fileCount = len(files)
-            maxsamples = clamp(args.maxsamples, 0, fileCount)
-            files = files[fileCount - maxsamples - 1 : fileCount - 1]
+            file_count = len(files)
+            maxsamples = clamp(args.maxsamples, 0, file_count)
+            files = files[file_count - maxsamples - 1 : file_count - 1]
+
+    return files
+
+def parse_directory(dir_name, args, env):
+    print(f"Parsing directory {dir_name}")
+
+    # get list of files to parse
+    files = get_json_files(os.path.join(args.directory, dir_name), args)
 
     metrics = args.metric
     plots = []
@@ -257,7 +263,7 @@ def parse_directory(dir_name, args, env):
                         entry.path, benchmarks, metric, git_hashes, git_descriptions
                     )
                 except Exception as e:
-                    print("Corrupt benchmark file encountered, skipping...")
+                    print(f"Corrupt benchmark file encountered, skipping: {entry.path}")
                     print(e)
 
         # analyse benchmarks
@@ -265,16 +271,12 @@ def parse_directory(dir_name, args, env):
             # check we have enough records for this benchmark (if not then skip it)
             sample_count = len(raw_values)
             print(
-                "found "
-                + str(sample_count)
-                + " benchmark records for benchmark "
-                + benchmark
+                f"Found {str(sample_count)} benchmark records for benchmark {benchmark}"
             )
 
             if sample_count < 10 + args.slidingwindow:
                 print(
-                    "BENCHMARK: " + benchmark + " needs more data, "
-                    "skipping step change detection."
+                    "\t - benchmark needs more data, skipping step change detection."
                 )
                 args.detectstepchanges = False
 
@@ -306,7 +308,7 @@ def parse_directory(dir_name, args, env):
                 ax.plot(lrx, lry, "tab:orange", label="linear regression")
             else:
                 print(
-                    "BENCHMARK: " + benchmark + " needs more data, "
+                    "\t - benchmark needs more data, "
                     "skipping smoothing and linear regression."
                 )
 
